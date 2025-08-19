@@ -1,4 +1,6 @@
 from fastapi import FastAPI
+from app.database import Base, engine
+from app import models
 
 app = FastAPI(
     title="Melodia API",
@@ -9,3 +11,5 @@ app = FastAPI(
 @app.get("/ping")
 def ping():
     return {"message": "pong"}
+
+Base.metadata.create_all(bind=engine)
