@@ -8,6 +8,9 @@ class SongBase(BaseModel):
 class SongCreate(SongBase):
     pass
 
+class SongToAdd(BaseModel):
+    song_id: int
+
 class Song(SongBase):
     id: int
 

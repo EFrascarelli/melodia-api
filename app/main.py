@@ -23,7 +23,6 @@ def create_song(song: schemas.SongCreate, db: Session = Depends(get_db)):
     db.refresh(db_song)
     return db_song
 
-
 @app.post("/playlists", response_model=schemas.Playlist, status_code=status.HTTP_201_CREATED)
 def create_playlist(playlist: schemas.PlaylistCreate, db: Session = Depends(get_db)):
     db_playlist = models.Playlist(name=playlist.name)
@@ -50,8 +49,6 @@ def create_playlist(playlist: schemas.PlaylistCreate, db: Session = Depends(get_
         "name": db_playlist.name,
         "songs": db_playlist.ordered_songs
     }
-
-
 
 @app.get("/songs", response_model=list[schemas.Song])
 def get_songs(db: Session = Depends(get_db)):
@@ -92,5 +89,73 @@ def get_playlist(id: int, db: Session = Depends(get_db)):
         "name": playlist.name,
         "songs": ordered_songs
     }
+
+@app.post("/playlists/{id}/songs", response_model=schemas.Playlist)
+def add_song_to_playlist(id: int, data: schemas.SongToAdd, db: Session = Depends(get_db)):
+    playlist = db.query(models.Playlist).filter(models.Playlist.id == id).first()
+    if not playlist:
+        raise HTTPException(status_code=404, detail="Playlist not found")
+
+    song = db.query(models.Song).filter(models.Song.id == data.song_id).first()
+    if not song:
+        raise HTTPException(status_code=404, detail="Song not found")
+
+    # Verificar si ya está
+    exists = db.query(models.PlaylistSong).filter_by(
+        playlist_id=id, song_id=data.song_id
+    ).first()
+    if exists:
+        raise HTTPException(status_code=400, detail="Song already in playlist")
+
+    # Calcular posición
+    position = len(playlist.songs)
+
+    link = models.PlaylistSong(
+        playlist_id=id,
+        song_id=data.song_id,
+        position=position
+    )
+    db.add(link)
+    db.commit()
+
+    ordered_songs = [ps.song for ps in sorted(playlist.songs, key=lambda ps: ps.position)]
+    return {
+        "id": playlist.id,
+        "name": playlist.name,
+        "songs": ordered_songs
+    }
+
+@app.delete("/playlists/{id}/songs/{song_id}", response_model=schemas.Playlist)
+def remove_song_from_playlist(id: int, song_id: int, db: Session = Depends(get_db)):
+    playlist = db.query(models.Playlist).filter(models.Playlist.id == id).first()
+    if not playlist:
+        raise HTTPException(status_code=404, detail="Playlist not found")
+
+    link = db.query(models.PlaylistSong).filter_by(
+        playlist_id=id, song_id=song_id
+    ).first()
+
+    if not link:
+        raise HTTPException(status_code=404, detail="Song not in playlist")
+
+    db.delete(link)
+    db.commit()
+
+    # Reordenar posiciones restantes
+    remaining_links = db.query(models.PlaylistSong).filter_by(
+        playlist_id=id
+    ).order_by(models.PlaylistSong.position).all()
+
+    for i, ps in enumerate(remaining_links):
+        ps.position = i
+    db.commit()
+
+    ordered_songs = [ps.song for ps in remaining_links]
+    return {
+        "id": playlist.id,
+        "name": playlist.name,
+        "songs": ordered_songs
+    }
+
 
 Base.metadata.create_all(bind=engine)
