@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from app.database import SessionLocal, engine, Base, get_db
+from app.database import SessionLocal, engine, Base
 from app import models, schemas
 
 def get_db():
@@ -45,11 +45,52 @@ def create_playlist(playlist: schemas.PlaylistCreate, db: Session = Depends(get_
             db.add(link)
         db.commit()
 
-    return db_playlist
+    return {
+        "id": db_playlist.id,
+        "name": db_playlist.name,
+        "songs": db_playlist.ordered_songs
+    }
 
 
-@app.get("/ping")
-def ping():
-    return {"message": "pong"}
+
+@app.get("/songs", response_model=list[schemas.Song])
+def get_songs(db: Session = Depends(get_db)):
+    return db.query(models.Song).all()
+
+@app.get("/songs/{id}", response_model=schemas.Song)
+def get_song(id: int, db: Session = Depends(get_db)):
+    song = db.query(models.Song).filter(models.Song.id == id).first()
+    if not song:
+        raise HTTPException(status_code=404, detail="Song not found")
+    return song
+
+@app.get("/playlists", response_model=list[schemas.Playlist])
+def get_playlists(db: Session = Depends(get_db)):
+    playlists = db.query(models.Playlist).all()
+    result = []
+
+    for playlist in playlists:
+        ordered_songs = [ps.song for ps in sorted(playlist.songs, key=lambda ps: ps.position)]
+        result.append({
+            "id": playlist.id,
+            "name": playlist.name,
+            "songs": ordered_songs
+        })
+
+    return result
+
+@app.get("/playlists/{id}", response_model=schemas.Playlist)
+def get_playlist(id: int, db: Session = Depends(get_db)):
+    playlist = db.query(models.Playlist).filter(models.Playlist.id == id).first()
+    if not playlist:
+        raise HTTPException(status_code=404, detail="Playlist not found")
+
+    ordered_songs = [ps.song for ps in sorted(playlist.songs, key=lambda ps: ps.position)]
+    
+    return {
+        "id": playlist.id,
+        "name": playlist.name,
+        "songs": ordered_songs
+    }
 
 Base.metadata.create_all(bind=engine)

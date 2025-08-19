@@ -19,6 +19,11 @@ class Playlist(Base):
 
     songs = relationship("PlaylistSong", back_populates="playlist", cascade="all, delete")
 
+    @property
+    def ordered_songs(self):
+        return [ps.song for ps in sorted(self.songs, key=lambda ps: ps.position)]
+
+
 class PlaylistSong(Base):
     __tablename__ = "playlist_songs"
     __table_args__ = (UniqueConstraint("playlist_id", "song_id", name="unique_song_in_playlist"),)
